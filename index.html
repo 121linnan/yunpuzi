@@ -1,0 +1,121 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>云铺子 - 网盘搜索</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f6f7f9;color:#252a32;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+header{background:white;padding:22px 18px 18px;text-align:center;border-bottom:1px solid #eee}
+.logo{font-size:27px;font-weight:750;letter-spacing:2px}
+.sub{color:#999;font-size:12px;margin-top:7px}
+main{max-width:680px;margin:28px auto;padding:0 16px}
+.search{display:flex;background:white;border:1px solid #e5e7eb;border-radius:13px;padding:5px;box-shadow:0 3px 15px #1720330a}
+input{flex:1;min-width:0;border:0;outline:0;padding:12px;font-size:16px;background:transparent}
+button{border:0;border-radius:10px;background:#252a32;color:white;padding:0 20px;font-size:15px}
+.filters{display:flex;gap:9px;overflow:auto;padding:18px 0;white-space:nowrap}
+.filters button{background:white;color:#666;border:1px solid #e5e7eb;padding:8px 13px;border-radius:20px}
+.filters button.active{background:#252a32;color:white;border-color:#252a32}
+.info{font-size:13px;color:#999;margin:8px 2px 12px}
+.card{background:white;border:1px solid #eee;border-radius:12px;padding:15px;margin-bottom:10px}
+.name{font-size:15px;font-weight:600;line-height:1.6;word-break:break-word}
+.meta{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:#999}
+.tag{background:#f0f4f8;color:#657487;padding:4px 8px;border-radius:5px}
+.open{margin-left:auto;background:#252a32;color:white;padding:7px 13px;border-radius:8px;text-decoration:none;font-size:12px}
+.empty{text-align:center;color:#aaa;padding:45px 10px;font-size:14px}
+footer{text-align:center;color:#aaa;font-size:11px;padding:35px 10px}
+</style>
+</head>
+<body>
+<header>
+<div class="logo">☁ 云铺子</div>
+<div class="sub">简洁 · 免费 · 网盘资源搜索</div>
+</header>
+<main>
+<form class="search" id="form">
+<input id="kw" placeholder="输入资源名称搜索…" value="兰香如故">
+<button type="submit">搜索</button>
+</form>
+<div class="filters" id="filters">
+<button class="active" data-pan="">全部网盘</button>
+<button data-pan="quark">夸克</button>
+<button data-pan="baidu">百度</button>
+<button data-pan="aliyun">阿里</button>
+<button data-pan="uc">UC</button>
+<button data-pan="xunlei">迅雷</button>
+</div>
+<div class="info" id="info">输入关键词，搜索公开资源</div>
+<div id="results"><div class="empty">输入关键词，开始搜索</div></div>
+</main>
+<footer>云铺子 · 仅展示公开索引结果，请遵守相关平台规则</footer>
+<script>
+const API="https://www.pansousuo.com/api/search";
+const form=document.getElementById("form");
+const kw=document.getElementById("kw");
+const results=document.getElementById("results");
+const info=document.getElementById("info");
+const filters=document.getElementById("filters");
+let pan="";
+filters.addEventListener("click",e=>{
+ const b=e.target.closest("button[data-pan]");
+ if(!b)return;
+ filters.querySelectorAll("button").forEach(x=>x.classList.remove("active"));
+ b.classList.add("active");pan=b.dataset.pan;
+ if(kw.value.trim())search();
+});
+function collect(data){
+ if(Array.isArray(data))return data;
+ if(!data||typeof data!=="object")return [];
+ for(const k of ["items","results","list","data","records"])
+  if(Array.isArray(data[k]))return data[k];
+ if(data.data&&typeof data.data==="object")return collect(data.data);
+ return [];
+}
+function safeUrl(item){
+ const u=item.url||item.link||item.share_url||item.href||item.pan_url;
+ if(typeof u!=="string")return "";
+ try{const x=new URL(u);return ["https:","http:"].includes(x.protocol)?x.href:""}catch{return ""}
+}
+function render(items){
+ results.replaceChildren();
+ const seen=new Set();
+ items.forEach(item=>{
+  const url=safeUrl(item);
+  const title=item.title||item.name||item.filename||item.content||"未命名资源";
+  if(!url||seen.has(url))return;
+  seen.add(url);
+  const card=document.createElement("div");card.className="card";
+  const name=document.createElement("div");name.className="name";name.textContent=title;
+  const meta=document.createElement("div");meta.className="meta";
+  const tag=document.createElement("span");tag.className="tag";
+  tag.textContent=item.pan||item.type||"网盘资源";
+  const a=document.createElement("a");a.className="open";
+  a.href=url;a.target="_blank";a.rel="noopener noreferrer";a.textContent="打开链接";
+  meta.append(tag,a);card.append(name,meta);results.append(card);
+ });
+ if(!results.children.length)results.innerHTML='<div class="empty">没有找到可展示的结果，请尝试其他关键词</div>';
+}
+async function search(){
+ const q=kw.value.trim();if(!q)return;
+ info.textContent="正在搜索，请稍候…";
+ results.innerHTML='<div class="empty">正在搜索公开资源…</div>';
+ try{
+  const p=new URLSearchParams({q});
+  if(pan)p.set("pan",pan);
+  const r=await fetch(API+"?"+p.toString());
+  if(!r.ok)throw Error("搜索服务暂时不可用");
+  const data=await r.json();
+  const items=collect(data);
+  render(items);
+  info.textContent="找到 "+(data.total??items.length)+" 条结果";
+ }catch(e){
+  info.textContent="暂时无法连接搜索服务";
+  results.innerHTML='<div class="empty">搜索失败，可能是网络或接口限制。请稍后重试。</div>';
+ }
+}
+form.addEventListener("submit",e=>{e.preventDefault();search()});
+</script>
+</body>
+</html>
